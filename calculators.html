@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Seeding &amp; IC50 Bench</title>
+<style>
+/* Layout: single column bench sheet, numbered stages (count, seed, dose, freeze, lysis, qPCR), result panels inline under each */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --ink:#18221f; --muted:#5d6b66; --line:#d5ddd9;
+  --accent:#0f7a6c; --accent-soft:#e1f1ee; --warn:#a4570a; --warn-soft:#fbefe1; --bad:#b3261e; --bad-soft:#fbe7e5; --good:#1f7a3a;
+  --f-ui: system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-num: ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111816; --surface:#19221f; --ink:#e6eeeb; --muted:#93a39d; --line:#2c3935;
+  --accent:#4cc3b0; --accent-soft:#163430; --warn:#f0b06a; --warn-soft:#3a2a16; --bad:#ff8a80; --bad-soft:#3b1c1a; --good:#7bd88f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111816; --surface:#19221f; --ink:#e6eeeb; --muted:#93a39d; --line:#2c3935;
+  --accent:#4cc3b0; --accent-soft:#163430; --warn:#f0b06a; --warn-soft:#3a2a16; --bad:#ff8a80; --bad-soft:#3b1c1a; --good:#7bd88f; color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-padding-top:calc(60px + env(safe-area-inset-top,0px))}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.45}
+.wrap{max-width:720px;margin:0 auto;padding-block:calc(20px + env(safe-area-inset-top,0px)) calc(48px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:18px}
+body.embedded .wrap{padding-top:8px}
+header h1{font-size:1.45rem;margin:0;letter-spacing:-.01em;text-wrap:balance}
+header p{margin:4px 0 0;color:var(--muted);font-size:.9rem}
+nav{display:flex;gap:6px;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:8px;overflow-x:auto;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav button{flex:1 0 auto;font:inherit;font-size:.85rem;font-weight:600;padding:9px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;white-space:nowrap}
+nav button[aria-selected="true"]{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+section.stage{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.stage h2{margin:0;font-size:1.05rem;display:flex;align-items:baseline;gap:8px}
+.stage h2 .n{font-family:var(--f-num);font-size:.8rem;color:var(--accent);font-weight:700}
+.hint{color:var(--muted);font-size:.85rem;margin:0}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:420px){.grid{grid-template-columns:minmax(0,1fr)}}
+label{display:flex;flex-direction:column;gap:4px;font-size:.8rem;font-weight:600;color:var(--muted);letter-spacing:.02em;min-width:0}
+.row{display:flex;gap:6px}
+input,select{font:inherit;font-family:var(--f-num);font-size:16px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;width:100%;min-width:0}
+select{font-family:var(--f-ui);font-size:15px}
+.row select{flex:0 0 auto;width:auto}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.check{flex-direction:row;align-items:center;gap:8px;font-weight:500;color:var(--ink);font-size:.9rem}
+.check input{width:20px;height:20px;flex:none}
+.out{background:var(--accent-soft);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.big{font-family:var(--f-num);font-size:1.5rem;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;font-size:.92rem;margin:0}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-family:var(--f-num);font-variant-numeric:tabular-nums;text-align:right;font-weight:600}
+.recipe{font-family:var(--f-num);font-size:.92rem;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;line-height:1.6;font-variant-numeric:tabular-nums}
+.recipe b{color:var(--accent)}
+.flag{border-radius:8px;padding:10px 12px;font-size:.88rem}
+.flag.warn{background:var(--warn-soft);color:var(--warn)}
+.flag.bad{background:var(--bad-soft);color:var(--bad)}
+.flag.ok{background:var(--accent-soft);color:var(--good)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:.86rem;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);background:var(--bg)}
+td{font-family:var(--f-num)}
+td:first-child,th:first-child{text-align:left}
+tr:last-child td{border-bottom:0}
+details{font-size:.88rem;color:var(--muted)}
+details summary{cursor:pointer;font-weight:600;color:var(--ink)}
+label .sub{font-weight:400;color:var(--muted);font-size:.75rem;letter-spacing:0;line-height:1.3}
+.work{margin:8px 0 0;padding-left:1.4em;display:flex;flex-direction:column;gap:8px;color:var(--ink)}
+.work li{padding-left:2px}
+.work .what{font-size:.82rem;color:var(--muted);display:block}
+.work .eq{font-family:var(--f-num);font-size:.85rem;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.work .eq b{color:var(--accent)}
+.conv{color:var(--muted);font-size:.85em;font-weight:400}
+footer{font-size:.8rem;color:var(--muted);text-align:center}
+.linkbtn{font:inherit;font-size:.8rem;background:none;border:0;color:var(--accent);text-decoration:underline;cursor:pointer;padding:0}
+.adds{display:flex;flex-direction:column;gap:8px}
+.add{display:grid;grid-template-columns:24px minmax(0,1.6fr) minmax(0,.8fr) minmax(0,.8fr) auto;gap:6px;align-items:center}
+.add input[type=checkbox]{width:20px;height:20px}
+.add .nm{font-family:var(--f-ui);font-size:15px}
+.addhead{display:grid;grid-template-columns:24px minmax(0,1.6fr) minmax(0,.8fr) minmax(0,.8fr) auto;gap:6px;font-size:.72rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.addhead span:last-child{min-width:62px}
+.add select{width:62px;padding:9px 4px}
+.compact th,.compact td{padding:7px 6px}
+@media (max-width:480px){.addhead{display:none}.add{grid-template-columns:24px minmax(0,1fr) minmax(0,1fr) 62px;row-gap:4px;padding-bottom:6px;border-bottom:1px solid var(--line)}.add input[type=checkbox]{grid-row:span 2}.add .nm{grid-column:2/-1}}
+.savebtn{font:inherit;font-weight:700;font-size:.95rem;border:0;border-radius:10px;padding:12px;background:var(--accent);color:var(--bg);cursor:pointer}
+.savebtn.done{opacity:.6}
+</style></head><body>
+
+<div class="wrap">
+<header>
+  <h1>Seeding &amp; IC50 Bench</h1>
+  <p>Hemocytometer count, plate seeding, drug dilution series, freezing stocks, lysis buffer and qPCR master mix. Works offline once saved. Numbers can be typed as 645000, 6.45e5 or 6.45x10^5.</p>
+</header>
+
+<nav role="tablist">
+  <button role="tab" data-go="s1" aria-selected="true">1 · Count</button>
+  <button role="tab" data-go="s2" aria-selected="false">2 · Seed</button>
+  <button role="tab" data-go="s3" aria-selected="false">3 · Drug</button>
+  <button role="tab" data-go="s4" aria-selected="false">4 · Freeze</button>
+  <button role="tab" data-go="s5" aria-selected="false">5 · Lysis</button>
+  <button role="tab" data-go="s6" aria-selected="false">6 · qPCR</button>
+</nav>
+
+<!-- STAGE 1 -->
+<section class="stage" id="s1">
+  <h2><span class="n">01</span>Stock concentration</h2>
+  <div class="grid">
+    <label>Live cells counted (total)<input id="c_live" inputmode="decimal" value="129"></label>
+    <label>Large squares counted<input id="c_sq" inputmode="decimal" value="4"></label>
+    <label>Dead (blue) cells counted<input id="c_dead" inputmode="decimal" value="0"></label>
+    <label>Stock suspension volume<span class="row"><input id="c_vol" inputmode="decimal" value="5"><select id="c_volu" class="unit" data-kind="vol"><option value="0.000001">nL</option><option value="0.001">µL</option><option value="1" selected>mL</option></select></span></label>
+  </div>
+  <label class="check"><input type="checkbox" id="c_dfon" checked> Apply trypan blue dilution factor</label>
+  <div class="grid" id="dfbox">
+    <label>Dilution factor<input id="c_df" inputmode="decimal" value="2"></label>
+    <label>Or enter count directly (cells/mL)<input id="c_direct" inputmode="decimal" placeholder="optional, overrides count"></label>
+  </div>
+  <div class="out" id="o1"></div>
+  <button class="savebtn" data-save="s1" hidden>Save to run</button>
+  <details open><summary>Show the calculation</summary>
+    <ol class="work" id="w1"></ol>
+    <p>Turn off the dilution factor only if your counter already corrects for trypan blue or your lab protocol skips it on purpose.</p>
+  </details>
+</section>
+
+<!-- STAGE 2 -->
+<section class="stage" id="s2">
+  <h2><span class="n">02</span>Seeding</h2>
+  <div class="grid">
+    <label>Vessel
+      <select id="s_vessel">
+        <option value="0.1">96-well (100 µL)</option>
+        <option value="0.5">24-well (0.5 mL)</option>
+        <option value="1">12-well (1 mL)</option>
+        <option value="2">6-well (2 mL)</option>
+        <option value="2">35 mm dish (2 mL)</option>
+        <option value="3" selected>60 mm dish (3 mL)</option>
+        <option value="10">100 mm dish (10 mL)</option>
+        <option value="custom">Custom volume</option>
+      </select></label>
+    <label>Volume per well/plate<span class="row"><input id="s_v" inputmode="decimal" value="3"><select id="s_vu" class="unit" data-kind="vol"><option value="0.000001">nL</option><option value="0.001">µL</option><option value="1" selected>mL</option></select></span></label>
+    <label>Target type
+      <select id="s_mode"><option value="per">Cells per well/plate</option><option value="ml">Cells per mL</option></select></label>
+    <label id="s_targetlab">Target cells per well/plate<input id="s_t" inputmode="decimal" value="600000"></label>
+    <label>Number of wells/plates<input id="s_n" inputmode="decimal" value="2"></label>
+    <label>Extra for pipetting loss (%)<input id="s_over" inputmode="decimal" value="10"></label>
+  </div>
+  <div class="out" id="o2"></div>
+  <button class="savebtn" data-save="s2" hidden>Save to run</button>
+  <details open><summary>Show the calculation</summary>
+    <ol class="work" id="w2"></ol>
+  </details>
+</section>
+
+<!-- STAGE 3 -->
+<section class="stage" id="s3">
+  <h2><span class="n">03</span>Drug dilution series (IC50)</h2>
+  <p class="hint">Assumes cells sit in the seeding volume above, and you add a fixed volume of drug-in-medium to each well. Each tube is sized for (wells × added volume + extra) per plate, times the number of plates.</p>
+  <div class="grid">
+    <label>Stock concentration<span class="sub">Your drug stock tube, before any dilution</span>
+      <span class="row"><input id="d_stock" inputmode="decimal" value="10"><select id="d_stocku" class="unit" data-kind="conc"><option value="0.001">nM</option><option value="1">µM</option><option value="1000" selected>mM</option></select></span></label>
+    <label>Highest dose in the well<span class="sub">Final concentration cells see in the top-dose wells</span>
+      <span class="row"><input id="d_top" inputmode="decimal" value="10"><select id="d_topu" class="unit" data-kind="conc"><option value="0.001">nM</option><option value="1" selected>µM</option><option value="1000">mM</option></select></span></label>
+    <label>Dilution between tubes (fold)<span class="sub">2 = each tube is half the one before</span><input id="d_fold" inputmode="decimal" value="3"></label>
+    <label>Number of drug tubes<span class="sub">Doses only. The DMSO/vehicle tube is added for you</span><input id="d_pts" inputmode="decimal" value="8"></label>
+    <label>Volume added on top of cells<span class="sub">Pipetted from each tube into each well</span><span class="row"><input id="d_add" inputmode="decimal" value="100"><select id="d_addu" class="unit" data-kind="vol"><option value="0.000001">nL</option><option value="0.001" selected>µL</option><option value="1">mL</option></select></span></label>
+    <label>Wells per dose, per plate<span class="sub">Replicate wells that get the same dose</span><input id="d_rep" inputmode="decimal" value="12"></label>
+    <label>Safety margin per plate<span class="sub">Extra made per tube for pipetting loss and reservoir dead volume</span><span class="row"><input id="d_over" inputmode="decimal" value="0.8"><select id="d_overu" class="unit" data-kind="vol"><option value="0.000001">nL</option><option value="0.001">µL</option><option value="1" selected>mL</option></select></span></label>
+    <label>Number of plates<span class="sub">Plates getting this same dose series</span><input id="d_plates" inputmode="decimal" value="1"></label>
+    <label>Stock dissolved in<span class="sub">Sets up the matching vehicle control</span>
+      <select id="d_solv"><option value="DMSO">DMSO</option><option value="water">Water / PBS</option></select></label>
+  </div>
+  <div class="out" id="o3"></div>
+  <button class="savebtn" data-save="s3" hidden>Save to run</button>
+  <details open><summary>Show the calculation</summary>
+    <ol class="work" id="w3"></ol>
+    <p>Vehicle control gets the same solvent % as the top concentration (the highest solvent level in the series).</p>
+  </details>
+</section>
+
+<!-- STAGE 4 -->
+<section class="stage" id="s4">
+  <h2><span class="n">04</span>Freezing stocks</h2>
+  <p class="hint">Uses the count from step 1. Cells are spun down and resuspended in freezing medium, so the stock concentration does not limit the density.</p>
+  <div class="grid">
+    <label>Cells per mL in each vial<span class="sub">Most lines are frozen at about 1 to 5 × 10⁶ cells/mL</span><input id="f_dens" inputmode="decimal" value="1x10^6"></label>
+    <label>Volume per vial<span class="sub">Freezing medium in each cryovial</span><span class="row"><input id="f_vol" inputmode="decimal" value="1"><select id="f_volu" class="unit" data-kind="vol"><option value="0.000001">nL</option><option value="0.001">µL</option><option value="1" selected>mL</option></select></span></label>
+    <label>Number of vials<input id="f_n" inputmode="decimal" value="5"></label>
+    <label>DMSO in freezing medium (%)<span class="sub">10% is the usual amount</span><input id="f_dmso" inputmode="decimal" value="10"></label>
+    <label>Freezing medium base
+      <select id="f_base"><option value="FBS">FBS</option><option value="complete medium">Complete medium</option><option value="medium + 20% FBS">Medium + 20% FBS</option></select></label>
+    <label>Extra freezing medium (vials' worth)<span class="sub">Covers pipetting loss</span><input id="f_spare" inputmode="decimal" value="1"></label>
+  </div>
+  <div class="out" id="o4"></div>
+  <button class="savebtn" data-save="s4" hidden>Save to run</button>
+  <details open><summary>Show the calculation</summary>
+    <ol class="work" id="w4"></ol>
+  </details>
+</section>
+
+<!-- STAGE 5 -->
+<section class="stage" id="s5">
+  <h2><span class="n">05</span>Lysis buffer + inhibitors</h2>
+  <p class="hint">Makes one batch of complete lysis buffer for all samples. Keep everything on ice and add inhibitors just before lysing.</p>
+  <div class="grid">
+    <label>Number of samples<input id="l_n" inputmode="decimal" value="6"></label>
+    <label>Buffer per sample<span class="sub">Rough guide: 6-well 80 to 150 µL, 60 mm 150 to 250 µL, 100 mm 300 to 500 µL. Use your lab's volumes.</span><span class="row"><input id="l_v" inputmode="decimal" value="100"><select id="l_vu" class="unit" data-kind="vol"><option value="0.000001">nL</option><option value="0.001" selected>µL</option><option value="1">mL</option></select></span></label>
+    <label>Extra for pipetting loss (%)<input id="l_over" inputmode="decimal" value="10"></label>
+    <label>Base buffer
+      <select id="l_base"><option>RIPA</option><option>NP-40 lysis buffer</option><option>IP lysis buffer</option><option>Triton X-100 lysis buffer</option><option>Other</option></select></label>
+  </div>
+  <div class="addhead"><span></span><span>Additive</span><span>Stock</span><span>Final</span><span>Unit</span></div>
+  <p class="hint" style="margin:-6px 0 0">Each additive: stock, then final concentration, then unit.</p>
+  <div class="adds" id="adds"></div>
+  <div class="out" id="o5"></div>
+  <button class="savebtn" data-save="s5" hidden>Save to run</button>
+  <details open><summary>Show the calculation</summary>
+    <ol class="work" id="w5"></ol>
+    <p>Stock and final must use the same unit. Cocktail tablets or solutions are usually sold as 100× (check the label: some are 50× or 25×).</p>
+  </details>
+</section>
+
+<!-- STAGE 6 -->
+<section class="stage" id="s6">
+  <h2><span class="n">06</span>qPCR master mix</h2>
+  <p class="hint">One mix per gene (primer pair). Template goes into each well separately after the mix.</p>
+  <div class="grid">
+    <label>cDNA samples<input id="q_s" inputmode="decimal" value="6"></label>
+    <label>Genes (incl. reference genes)<input id="q_g" inputmode="decimal" value="3"></label>
+    <label>Technical replicates<input id="q_r" inputmode="decimal" value="3"></label>
+    <label>Extra for pipetting loss (%)<input id="q_over" inputmode="decimal" value="10"></label>
+    <label>Reaction volume<span class="row"><input id="q_v" inputmode="decimal" value="20"><select id="q_vu" class="unit" data-kind="vol"><option value="0.000001">nL</option><option value="0.001" selected>µL</option><option value="1">mL</option></select></span></label>
+    <label>Master mix strength (×)<span class="sub">SYBR Green mixes are usually 2×</span><input id="q_mx" inputmode="decimal" value="2"></label>
+    <label>Primer format
+      <select id="q_pair"><option value="sep">Separate F and R tubes</option><option value="pre">Premixed F+R</option></select></label>
+    <label>Primer stock (µM, each primer)<input id="q_pst" inputmode="decimal" value="10"></label>
+    <label>Final primer (nM, each)<span class="sub">Commonly 200 to 500 nM. Follow your mix's manual.</span><input id="q_pf" inputmode="decimal" value="300"></label>
+    <label>Template per reaction (µL)<input id="q_t" inputmode="decimal" value="2"></label>
+    <label>Plate
+      <select id="q_plate"><option value="96">96-well</option><option value="384">384-well</option></select></label>
+  </div>
+  <label class="check"><input type="checkbox" id="q_ntc" checked> Include no-template control (NTC) for every gene</label>
+  <div class="out" id="o6"></div>
+  <button class="savebtn" data-save="s6" hidden>Save to run</button>
+  <details open><summary>Show the calculation</summary>
+    <ol class="work" id="w6"></ol>
+  </details>
+</section>
+
+<footer>Inputs are remembered on this device. <button class="linkbtn" id="reset">Reset to examples</button></footer>
+</div>
+
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+
+// Lysis additives: built before ids are collected so they are remembered too
+const ADDS=[
+  ["Protease inhibitor cocktail","100","1","x",true],
+  ["Phosphatase inhibitor cocktail","100","1","x",true],
+  ["PMSF","100","1","mM",true],
+  ["Sodium orthovanadate (Na3VO4)","200","1","mM",false],
+  ["Custom additive","","","x",false]];
+const UNITS=["x","M","mM","µM","mg/mL"];
+$("adds").innerHTML=ADDS.map((a,i)=>`<div class="add"><input type="checkbox" id="l_a${i}_on"${a[4]?" checked":""} aria-label="use ${a[0]}">`+
+  `<input class="nm" id="l_a${i}_nm" value="${a[0]}"${i<4?" readonly":""}>`+
+  `<input id="l_a${i}_st" inputmode="decimal" value="${a[1]}" aria-label="stock" placeholder="stock">`+
+  `<input id="l_a${i}_fi" inputmode="decimal" value="${a[2]}" aria-label="final" placeholder="final">`+
+  `<select id="l_a${i}_u">${UNITS.map(u=>`<option${u===a[3]?" selected":""}>${u}</option>`).join("")}</select></div>`).join("");
+
+const ids=["c_live","c_sq","c_dead","c_vol","c_dfon","c_df","c_direct","s_vessel","s_v","s_mode","s_t","s_n","s_over","d_stock","d_stocku","d_top","d_topu","d_fold","d_pts","d_add","d_rep","d_over","d_plates","d_solv","c_volu","s_vu","d_addu","d_overu","f_dens","f_vol","f_volu","f_n","f_dmso","f_base","f_spare",
+  "l_n","l_v","l_vu","l_over","l_base","q_s","q_g","q_r","q_over","q_v","q_vu","q_mx","q_pair","q_pst","q_pf","q_t","q_plate","q_ntc"];
+ADDS.forEach((a,i)=>ids.push(`l_a${i}_on`,`l_a${i}_nm`,`l_a${i}_st`,`l_a${i}_fi`,`l_a${i}_u`));
+const KEY="seeding-ic50-bench-v3", OLDKEY="seeding-ic50-bench-v2";
+const defaults={};
+ids.forEach(i=>{const e=$(i);defaults[i]=e.type==="checkbox"?e.checked:e.value;});
+try{const s=JSON.parse(localStorage.getItem(KEY)||localStorage.getItem(OLDKEY)||"null");if(s)ids.forEach(i=>{if(i in s){const e=$(i);if(e.type==="checkbox")e.checked=s[i];else e.value=s[i];}});}catch(e){}
+function save(){try{const s={};ids.forEach(i=>{const e=$(i);s[i]=e.type==="checkbox"?e.checked:e.value;});localStorage.setItem(KEY,JSON.stringify(s));}catch(e){}}
+
+// Reads 35600, 3.56e4, 3.56E4, 3.56x10^4, 3.56 × 10^4, 3.56*10^4, 3.56x10⁴, 10^4. Anything else is rejected, never half-read.
+const SUP="⁰¹²³⁴⁵⁶⁷⁸⁹";
+function parseNum(str){
+  let t=String(str??"").trim().replace(/,/g,"").replace(/\s+/g,"");
+  if(!t)return NaN;
+  t=t.replace(/[⁻]?[⁰¹²³⁴⁵⁶⁷⁸⁹]+/g,m=>"^"+m.replace("⁻","-").split("").map(c=>c==="-"?"-":SUP.indexOf(c)).join(""));
+  t=t.replace(/^([+-]?(?:\d+\.?\d*|\.\d+))[x×*]10\^?([+-]?\d+)$/i,"$1e$2");
+  t=t.replace(/^10\^([+-]?\d+)$/,"1e$1");
+  if(!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(t))return NaN;
+  const n=Number(t);return isFinite(n)?n:NaN;}
+const num=id=>parseNum($(id).value);
+const mul=id=>Number($(id).value);
+const mL=(id,u)=>num(id)*mul(u);  // volume in mL
+const unreadable=id=>String($(id).value).trim()!==""&&!isFinite(num(id));
+const sig=(x,d=3)=>{if(!isFinite(x))return "–";if(x===0)return "0";return Number(x.toPrecision(d)).toString();};
+const cells=x=>{if(!isFinite(x))return "–";if(Math.abs(x)>=1e4){const e=Math.floor(Math.log10(Math.abs(x)));return (x/10**e).toFixed(2)+" × 10"+sup(e);}return Math.abs(x)>=100?Math.round(x).toLocaleString():sig(x,3);};
+const sup=n=>String(n).split("").map(c=>"⁰¹²³⁴⁵⁶⁷⁸⁹"["0123456789".indexOf(c)]||(c==="-"?"⁻":c)).join("");
+// Pipetting steps (in µL): under 100 µL -> 0.1 µL, 100 to 1000 µL -> 1 µL, 1 mL and up -> 0.1 mL
+const stepOf=uL=>uL<100?0.1:uL<1000?1:100;
+const r10=x=>Math.round(x*1e6)/1e6;
+const upS=mL=>{const u=mL*1000,s=stepOf(u);return r10(Math.ceil(r10(u/s))*s)/1000;};
+const dnS=mL=>{const u=mL*1000,s=stepOf(u);return r10(Math.floor(r10(u/s))*s)/1000;};
+const nearS=mL=>{const u=mL*1000,s=stepOf(u);return r10(Math.round(u/s)*s)/1000;};
+const vol=mL=>{if(!isFinite(mL))return "–";const u=mL*1000;if(Math.abs(u)<1000){return (Math.abs(u)<100?(Math.round(u*10)/10):Math.round(u))+" µL";}return (Math.round(mL*10)/10)+" mL";};
+const conc=uM=>{if(!isFinite(uM))return "–";if(uM>=1000)return sig(uM/1000)+" mM";if(uM>=1)return sig(uM)+" µM";return sig(uM*1000)+" nM";};
+const flag=(cls,t)=>`<div class="flag ${cls}">${t}</div>`;
+
+const raw=mL=>!isFinite(mL)?"–":(Math.abs(mL)<1?sig(mL*1000,4)+" µL":sig(mL,4)+" mL");
+const W=(id,steps)=>{const el=$(id);if(el)el.innerHTML=steps.map(([w,e])=>`<li><span class="what">${w}</span><span class="eq">${e}</span></li>`).join("");};
+const rounded=(a,b,dir)=>Math.abs(a-b)>1e-9?` = ${raw(a)}, rounded ${dir} to <b>${vol(b)}</b>`:` = <b>${vol(b)}</b>`;
+// Convenience rounding: suggest an easier volume only when it changes things by 5% or less
+const niceStep=uL=>uL<20?1:uL<200?5:uL<1000?10:100;
+const conv=(mL,upOnly,lim)=>{const u=mL*1000;if(!(u>0))return null;const s=niceStep(u);let n=(upOnly?Math.ceil(r10(u/s)):Math.round(u/s))*s;if(n<=0)n=s;if(Math.abs(n-u)<1e-6)return null;const e=(n-u)/u;if(Math.abs(e)>(lim??0.05))return null;return {mL:n/1000,pct:e*100};};
+// Judges what rounding to the nearest easy volume would do: ok (≤5%), caution (5 to 10%), harmful (>10%)
+function roundFlags(mL,upOnly,label,effect){const c=conv(mL,upOnly,Infinity);if(!c)return "";const a=Math.abs(c.pct);
+  if(a<=5)return "";
+  if(a<=10)return flag("warn",`Caution: rounding ${label} from ${vol(mL)} to ${vol(c.mL)} would change ${effect} by ${pct(c.pct)}. Pipette the exact volume, or round and write down the real numbers.`);
+  return flag("bad",`Do not round ${label}: ${vol(c.mL)} instead of ${vol(mL)} changes ${effect} by ${pct(c.pct)}, a systematic shift large enough to matter. Pipette the exact volume, or pre-dilute so the volume is larger and easier to hit. (The 5% and 10% cutoffs are rules of thumb, not a published standard.)`);}
+function tinyFlag(mL,label){if(mL<0.0005)return flag("bad",`${vol(mL)} of ${label} is below 0.5 µL. Even with a P2, error at this volume can reach about 10% or more, and a droplet left on the tip adds more. Pre-dilute first (for example 1:10) and enter the diluted concentration instead.`);
+  if(mL<0.002)return flag("warn",`${vol(mL)} of ${label} is under 2 µL. A calibrated P2 is usually within a few % here, but the ISO 8655 limit allows about 12% at 1 µL on a P10, and technique errors grow at small volumes. Use a P2 (not a P10 or P20), pipette slowly, or pre-dilute.`);return "";}
+const pct=x=>(x>0?"+":"")+sig(x,2)+"%";
+const convNote=(mL,upOnly,what)=>{const c=conv(mL,upOnly);return c?` <span class="conv">(or ${vol(c.mL)} for convenience: ${what} ${pct(c.pct)})</span>`:"";};
+let C1=NaN;
+
+function stage1(){
+  const live=num("c_live"),sq=num("c_sq"),dead=num("c_dead")||0,V=mL("c_vol","c_volu");
+  const dfon=$("c_dfon").checked; $("c_df").disabled=!dfon;
+  const df=dfon?num("c_df"):1, direct=num("c_direct");
+  let h="";
+  C1=isFinite(direct)&&direct>0?direct:(live/sq)*df*1e4;
+  const perSq=live/sq;
+  h+=`<div class="big">${cells(C1)} cells/mL</div><dl class="kv">`;
+  if(!(isFinite(direct)&&direct>0)) h+=`<dt>Cells per square</dt><dd>${sig(perSq)}</dd><dt>Dilution factor used</dt><dd>${df}</dd>`;
+  h+=`<dt>Total cells in stock (${sig(V)} mL)</dt><dd>${cells(C1*V)}</dd>`;
+  if(dead>0&&live>0) h+=`<dt>Viability</dt><dd>${sig(live/(live+dead)*100)}%</dd>`;
+  h+=`</dl>`;
+  if(!(isFinite(direct)&&direct>0)&&isFinite(perSq)){
+    if(perSq<20) h+=flag("warn",`Only ${sig(perSq)} cells per square. Counts under 20 per square carry large error (about ±${Math.round(100/Math.sqrt(Math.max(live,1)))}% here). Count more squares or concentrate the cells.`);
+    else if(perSq>100) h+=flag("warn","Over 100 cells per square. Dilute further and recount for accuracy.");
+  }
+  if(!dfon) h+=flag("warn","Dilution factor is off. Only do this if your counter already corrects for trypan blue or your lab skips it on purpose.");
+  if(isFinite(direct)&&direct>0) W("w1",[["Concentration entered directly",`<b>${cells(C1)} cells/mL</b>`],["Total cells = concentration × stock volume",`${cells(C1)} × ${sig(V)} mL = <b>${cells(C1*V)} cells</b>`]]);
+  else W("w1",[
+    ["Average cells per square = live cells ÷ squares",`${sig(live)} ÷ ${sig(sq)} = <b>${sig(perSq,4)}</b>`],
+    [dfon?"Undo the trypan blue dilution: × dilution factor":"Dilution factor is off, so × 1",`${sig(perSq,4)} × ${df} = <b>${sig(perSq*df,4)}</b>`],
+    ["Convert to cells/mL: × 10⁴ (each square holds 0.1 µL)",`${sig(perSq*df,4)} × 10,000 = <b>${cells(C1)} cells/mL</b>`],
+    ["Total cells = cells/mL × stock volume",`${cells(C1)} × ${sig(V)} mL = <b>${cells(C1*V)} cells</b>`]
+  ].concat(dead>0&&live>0?[["Viability = live ÷ (live + dead) × 100",`${sig(live)} ÷ ${sig(live+dead)} × 100 = <b>${sig(live/(live+dead)*100)}%</b>`]]:[]));
+  {const bad=["c_direct","c_live","c_sq","c_dead","c_vol","c_df"].filter(unreadable);
+   if(bad.length){const names={c_direct:"the direct count",c_live:"live cells",c_sq:"squares",c_dead:"dead cells",c_vol:"stock volume",c_df:"dilution factor"};
+     h=flag("bad",`Couldn't read ${bad.map(b=>`"${$(b).value}" (${names[b]})`).join(", ")}. Type numbers like 35600, 3.56e4 or 3.56x10^4.`)+h;}
+   if(isFinite(direct)&&direct>0&&direct<1e4) h+=flag("warn",`${cells(direct)} cells/mL is unusually low for a cell suspension. Check the number, for example 3.56x10^4 rather than 3.56.`);
+   if(!(V>0)) h+=flag("warn","Enter the stock suspension volume to see total cells and whether you have enough for step 2.");}
+  $("o1").innerHTML=h;
+}
+
+let seedStockUsed=0;
+function stage2(){
+  seedStockUsed=0;
+  const mode=$("s_mode").value;
+  $("s_targetlab").firstChild.textContent=mode==="per"?"Target cells per well/plate":"Target cells per mL";
+  const v=mL("s_v","s_vu"),t=num("s_t"),n=num("s_n"),over=(num("s_over")||0)/100,V=mL("c_vol","c_volu");
+  if(!isFinite(C1)||C1<=0||![v,t,n].every(x=>isFinite(x)&&x>0)){$("o2").innerHTML=flag("bad","Fill in the count in step 1 and the volume, target and number of wells here.");return;}
+  const perWell=mode==="per"?t:t*v;
+  const targetConc=perWell/v;
+  // Extra: the larger of the % entered or one spare well
+  const extraWells=Math.max(n*over,1);
+  // Mix total is a round number (whole mL from 1 mL up). Cells are measured exactly (rounded up), medium fills to the total.
+  const mixRaw=v*(n+extraWells);
+  const mixVol=mixRaw>=1?Math.ceil(r10(mixRaw)):upS(mixRaw);
+  const stockNeed=upS(mixVol*targetConc/C1);      // round cells UP
+  seedStockUsed=stockNeed;
+  const medium=Math.max(0,mixVol-stockNeed);      // fill to the total
+  const realMix=mixVol;
+  const realPerWell=stockNeed*C1/realMix*v;
+  const perWellStock=upS(perWell/C1);
+  const perWellMed=Math.max(0,v-perWellStock);
+  let h=`<div class="big">${vol(perWellStock)} stock per well</div>
+  <div class="recipe">Single well/plate: <b>${vol(perWellStock)}</b> cells${convNote(perWellStock,true,"cells")}, then add medium up to <b>${vol(v)}</b> (about ${vol(perWellMed)})<br>
+  Master mix for ${sig(n)} (+ ${sig(extraWells,2)} spare): <b>${vol(stockNeed)}</b> cells${convNote(stockNeed,true,"cells")}, then add medium up to <b>${vol(mixVol)}</b> total (about ${vol(medium)})<br>
+  Mix well, then dispense ${vol(v)} into each.</div>
+  <dl class="kv"><dt>Target cells per well/plate</dt><dd>${cells(perWell)}</dd><dt>Actual cells per well (rounded mix)</dt><dd>${cells(realPerWell)}</dd>
+  <dt>Total cells in mix</dt><dd>${cells(stockNeed*C1)}</dd><dt>Stock left over</dt><dd>${vol(Math.max(0,V-stockNeed))}</dd></dl>`;
+  if(perWellStock>v) h+=flag("bad",`Your stock is too dilute: one well needs ${vol(perWellStock)} of stock, more than the ${vol(v)} well volume. Spin down (200 to 300 × g, 5 min) and resuspend in less medium, then recount.`);
+  else if(stockNeed>V) h+=flag("bad",`Not enough cells. The mix needs ${vol(stockNeed)} of stock (${cells(stockNeed*C1)} cells) but you have ${vol(V)} (${cells(C1*V)} cells). Seed fewer wells, lower the target, or expand first.`);
+  else h+=flag("ok",`Enough cells. You will use ${sig(stockNeed/V*100)}% of your stock.`);
+  if(perWellStock<v&&stockNeed<=V){
+    h+=tinyFlag(stockNeed,"cell stock in the master mix");
+    if(perWellStock<0.002) h+=flag("warn",`Per-well stock (${vol(perWellStock)}) is too small to pipette well by hand. Use the master mix.`);
+    h+=roundFlags(stockNeed,true,"the master mix cell stock","cells per well");
+  }
+  W("w2",[
+    [mode==="per"?"Cells per well/plate (your target)":"Cells per well/plate = cells/mL × well volume", mode==="per"?`<b>${cells(perWell)}</b>`:`${cells(t)} × ${vol(v)} = <b>${cells(perWell)}</b>`],
+    ["Target concentration in the mix = cells per well ÷ well volume",`${cells(perWell)} ÷ ${vol(v)} = <b>${cells(targetConc)} cells/mL</b>`],
+    ["Spare wells = the larger of (wells × extra %) or 1",`max(${sig(n)} × ${Math.round(over*100)}%, 1) = <b>${sig(extraWells,3)}</b>`],
+    ["Mix volume = well volume × (wells + spare)",`${vol(v)} × (${sig(n)} + ${sig(extraWells,3)})`+rounded(mixRaw,mixVol,"up")],
+    ["Cell stock = mix volume × target conc ÷ stock conc",`${vol(mixVol)} × ${cells(targetConc)} ÷ ${cells(C1)}`+rounded(mixVol*targetConc/C1,stockNeed,"up")],
+    ["Medium = mix volume − cell stock (fill to the total, no rounding needed)",`${vol(mixVol)} − ${vol(stockNeed)} = <b>${raw(medium)}</b>`],
+    ["Check: cells per well = stock × stock conc ÷ mix volume × well volume",`${vol(stockNeed)} × ${cells(C1)} ÷ ${vol(realMix)} × ${vol(v)} = <b>${cells(realPerWell)}</b>`],
+    ["Single well instead: cell stock = cells per well ÷ stock conc",`${cells(perWell)} ÷ ${cells(C1)}`+rounded(perWell/C1,perWellStock,"up")]
+  ]);
+  $("o2").innerHTML=h;
+}
+
+function stage3(){
+  const stock=num("d_stock")*mul("d_stocku");   // µM
+  const top=num("d_top")*mul("d_topu");          // µM
+  const fold=num("d_fold"),ptsRaw=Math.round(num("d_pts")),add=mL("d_add","d_addu"); // mL
+  const rep=num("d_rep"),extra=mL("d_over","d_overu"),plates=num("d_plates"),wellV=mL("s_v","s_vu"),solv=$("d_solv").value;
+  if(![stock,top,fold,add,rep,wellV,ptsRaw,plates].every(x=>isFinite(x)&&x>0)||!(extra>=0)||fold<=1){$("o3").innerHTML=flag("bad","Fill in every value (all positive). The fold must be greater than 1 and you need at least 1 concentration.");return;}
+  const pts=Math.min(ptsRaw,24);
+  const total=wellV+add, factor=total/add;
+  const perPlate=add*rep+extra;
+  const keepNeed=perPlate*plates;
+  // Same-volume series: every tube 2..n gets D medium, transfer T = D/(fold-1) down the line
+  let T,D;
+  if(keepNeed>=1){
+    T=Math.ceil(r10(keepNeed/(fold-1)));
+    D=nearS(T*(fold-1));
+    if(Number.isInteger(r10(fold))){D=Math.ceil(r10(keepNeed));T=Math.ceil(r10(D/(fold-1)));D=r10(T*(fold-1));}
+    while(D<keepNeed){T+=1;D=nearS(T*(fold-1));}
+  }else{
+    T=upS(keepNeed/(fold-1));
+    D=nearS(T*(fold-1));
+    if(D<keepNeed){D=upS(keepNeed);T=upS(D/(fold-1));}
+  }
+  // Make sure T, D and T+D all land exactly on the displayed pipetting grid, so what you read is what you pipette
+  {const onGrid=mL=>{const u=r10(mL*1000),st=stepOf(u);return Math.abs(r10(u/st)-Math.round(u/st))<1e-6;};
+   const intFold=Number.isInteger(r10(fold));let guard=0;
+   while(!(onGrid(T)&&onGrid(D)&&onGrid(T+D))&&guard++<2000){
+     const st=stepOf(r10((T+D)*1000))/1000; T=r10(Math.floor(r10(T/st))*st+st);
+     D=intFold?r10(T*(fold-1)):nearS(T*(fold-1)); if(D<keepNeed){D=upS(keepNeed);} }}
+  const tubeVol=r10(T+D);
+  const working=[];for(let i=0;i<pts;i++)working.push(top*factor/fold**i);
+  let sv=upS(tubeVol*working[0]/stock);
+  let med=Math.max(0,tubeVol-sv);
+  const realTopW=stock*sv/tubeVol;
+  const realFinal=i=>realTopW/fold**i/factor;
+  const solvPct=sv/(sv+med)*100;
+  const finalSolvPct=solvPct/factor;
+  let rows=`<tr><td>1</td><td>${conc(realFinal(0))}</td><td>${conc(realTopW)}</td><td>${vol(sv)} stock</td><td>to ${vol(tubeVol)}</td></tr>`;
+  for(let i=1;i<pts;i++) rows+=`<tr><td>${i+1}</td><td>${conc(realFinal(i))}</td><td>${conc(realTopW/fold**i)}</td><td>${vol(T)} of tube ${i}</td><td>${vol(D)}</td></tr>`;
+  const vehD=upS(solvPct/100*D), vehM=nearS(D-vehD);
+  const usedPerTube=add*rep*plates;
+  const totalMedium=med+D*(pts-1)+vehM;
+  const lastLeft=tubeVol-usedPerTube;
+  let h=`<div class="big">Start: ${vol(tubeVol)} in tube 1</div><p class="hint" style="margin:0">Each tube ends with ${vol(D)} for plating after passing ${vol(T)} to the next.</p>
+  <div class="recipe">Volume plan for ${sig(plates)} plate${plates>1?"s":""}:<br>
+  Per plate: ${sig(rep)} wells × ${vol(add)} + ${vol(extra)} safety margin = <b>${vol(perPlate)}</b><br>
+  Needed per tube: ${vol(perPlate)} × ${sig(plates)} = ${vol(keepNeed)}${Math.abs(D-keepNeed)>1e-9?`, rounded up to <b>${vol(D)}</b>`:""}<br>Kept in each tube for wells: <b>${vol(D)}</b>${Number.isInteger(r10(fold))||keepNeed<1?"":" (not a whole number because the fold is not a whole number)"}<br>
+  Tube 1 starts at <b>${vol(tubeVol)}</b>: ${vol(T)} goes to tube 2, ${vol(D)} stays for plating<br>Tubes 2 to ${pts} start with ${vol(D)} medium, get ${vol(T)}, pass ${vol(T)} on, and keep ${vol(D)}<br>
+  Last tube ends with an extra <b>${vol(T)}</b> leftover (discard it if you want equal volumes)<br>
+  Total medium to prepare: <b>${vol(upS(totalMedium))}</b> (all tubes + vehicle)<br>
+  Total drug stock used: <b>${vol(sv)}</b></div>
+  <dl class="kv"><dt>Top working solution</dt><dd>${conc(realTopW)}</dd><dt>Well volume after drug</dt><dd>${vol(total)}</dd><dt>Working solution is</dt><dd>${sig(factor)}× final</dd>
+  <dt>Medium pre-filled in tubes 2 to ${pts}</dt><dd>${vol(D)}</dd><dt>Transfer between tubes</dt><dd>${vol(T)}</dd>
+  <dt>Volume used for wells per tube</dt><dd>${vol(usedPerTube)}</dd><dt>Left in each tube after plating</dt><dd>${vol(D-usedPerTube)} (last: ${vol(lastLeft)})</dd>
+  <dt>Wells filled (incl. vehicle)</dt><dd>${sig((pts+1)*rep*plates)}</dd></dl>
+  <div class="tablewrap"><table><thead><tr><th>Tube</th><th>Final</th><th>Working</th><th>Take</th><th>+ Medium</th></tr></thead><tbody>${rows}</tbody></table></div>
+  <div class="recipe">1. Put <b>${vol(D)}</b> medium in tubes 2 to ${pts}.<br>
+  2. Make tube 1: <b>${vol(sv)}</b> stock${convNote(sv,false,"all doses")}, then add medium up to <b>${vol(tubeVol)}</b> total (about ${vol(med)}). Mix.<br>
+  3. Move <b>${vol(T)}</b> from tube 1 to 2, mix, then 2 to 3, and so on.<br>
+  4. Add <b>${vol(add)}</b> from each tube to ${sig(rep)} wells on each plate.<br>
+  Vehicle: <b>${vol(vehD)}</b> ${solv}${(()=>{const c=conv(vehD,false);const cs=conv(sv,false);return cs&&c?` <span class="conv">(or ${vol(c.mL)} if you rounded the stock)</span>`:"";})()} + <b>${vol(vehM)}</b> medium (${sig(solvPct,2)}% ${solv}, same as tube 1).</div>`;
+  {const c=conv(sv,false);if(c){const f=c.mL/sv;const list=[0,1,2].filter(i=>i<pts).map(i=>conc(realFinal(i)*f)).join(", ");
+    h+=flag("ok",`If you add ${vol(c.mL)} stock instead of ${vol(sv)}: every dose is ${pct(c.pct)} (${list}${pts>3?", ...":""}). Small next to normal IC50 variation between experiments, which is often 2 to 3 fold. Record the real doses, or match your lab's convention.`);}}
+  {const perPlateWells=(pts+1)*rep, seedN=num("s_n");
+   if(Math.abs(wellV-0.1)<1e-9&&perPlateWells>96) h+=flag("bad",`This layout needs ${perPlateWells} wells per plate (${pts} doses + vehicle, × ${sig(rep)} wells), but a 96-well plate has 96. With 12 wells per dose (one row each), you can fit at most 7 doses + vehicle. Lower the number of drug tubes or the wells per dose.`);
+   if(isFinite(seedN)&&perPlateWells*plates>seedN) h+=flag("warn",`The drug layout uses ${perPlateWells*plates} wells, but step 2 seeds only ${sig(seedN)}. Update the number of wells in step 2 so you have enough cells.`);}
+  if(ptsRaw>24) h+=flag("warn","Capped at 24 concentrations.");
+  if(sv>tubeVol) h+=flag("bad",`The stock is too weak to reach ${conc(working[0])} working. Use a more concentrated stock or a lower top dose.`);
+  else { h+=tinyFlag(sv,"drug stock in tube 1"); h+=roundFlags(sv,false,"the drug stock","every dose"); }
+  if(vehD<0.002) h+=flag(vehD<0.001?"bad":"warn",`The vehicle needs only ${vol(vehD)} ${solv}, which is hard to pipette accurately. Make a bigger batch (for example 10x the volume and use what you need), or pre-dilute the ${solv} in medium first.`);
+  if(Math.abs(realTopW/working[0]-1)>0.02) h+=flag("warn",`Rounding moved the top dose ${sig((realTopW/working[0]-1)*100,2)}% from the target. The table shows the real concentrations.`);
+  if(solv==="DMSO"){
+    if(finalSolvPct>0.5) h+=flag("bad",`Final DMSO in the top wells is ${sig(finalSolvPct,2)}%. Above about 0.5%, DMSO is often toxic on its own and will confound the curve. Use a more concentrated stock or a lower top dose.`);
+    else if(finalSolvPct>0.1) h+=flag("warn",`Final DMSO in the top wells is ${sig(finalSolvPct,2)}%. Many lines tolerate up to 0.5%, but some cells respond from about 0.1%. Check that your vehicle wells match untreated cells. Also, because the series is diluted in plain medium, DMSO drops in the lower doses. At this level, consider diluting in medium that already has ${sig(solvPct,2)}% DMSO so every dose has the same amount.`);
+    else h+=flag("ok",`Final DMSO in the top wells: ${sig(finalSolvPct,2)}% (0.1% or less is generally safe). Match this in the vehicle control.`);
+  }
+  const dIsWhole=Number.isInteger(r10(fold));
+  W("w3",[
+    ["Well volume after adding drug = cell volume + added volume",`${vol(wellV)} + ${vol(add)} = <b>${vol(total)}</b>`],
+    ["Working strength = well volume ÷ added volume",`${vol(total)} ÷ ${vol(add)} = <b>${sig(factor)}× final</b>`],
+    ["Top working conc = highest dose × working strength",`${conc(top)} × ${sig(factor)} = <b>${conc(working[0])}</b>`],
+    ["Needed per tube = (wells × added volume + safety margin) × plates",`(${sig(rep)} × ${vol(add)} + ${vol(extra)}) × ${sig(plates)} = <b>${raw(keepNeed)}</b>`],
+    ["Volume kept in each tube for plating (rounded up to a pipettable amount)",`<b>${vol(D)}</b>`],
+    ["Transfer to next tube = kept volume ÷ (fold − 1)",`${vol(D)} ÷ (${sig(fold)} − 1)${dIsWhole?"":" (approx.)"} = <b>${vol(T)}</b>`],
+    ["Tube 1 volume = kept + transferred",`${vol(D)} + ${vol(T)} = <b>${vol(tubeVol)}</b>`],
+    ["Stock in tube 1 = tube volume × top working conc ÷ stock conc",`${vol(tubeVol)} × ${conc(working[0])} ÷ ${conc(stock)}`+rounded(tubeVol*working[0]/stock,sv,"up")],
+    ["Medium in tube 1 = tube volume − stock (top up to the full tube volume)",`${vol(tubeVol)} − ${vol(sv)} = <b>${raw(med)}</b>`],
+    ["Real top working conc after rounding = stock conc × stock ÷ tube volume",`${conc(stock)} × ${vol(sv)} ÷ ${vol(tubeVol)} = <b>${conc(realTopW)}</b>`],
+    ["Each next tube = previous ÷ fold",`${conc(realTopW)} ÷ ${sig(fold)} = ${conc(realTopW/fold)}, then ${conc(realTopW/fold**2)}, ...`],
+    ["Solvent in tube 1 = stock ÷ tube volume × 100; in the well, ÷ working strength",`${vol(sv)} ÷ ${vol(sv+med)} × 100 = ${sig(solvPct,2)}%, then ÷ ${sig(factor)} = <b>${sig(finalSolvPct,2)}%</b>`],
+    ["Total medium = tube 1 medium + kept volume × other tubes + vehicle medium",`${vol(med)} + ${vol(D)} × ${pts-1} + ${vol(vehM)} = <b>${raw(totalMedium)}</b>`]
+  ]);
+  $("o3").innerHTML=h;
+}
+
+function stage4(){
+  const dens=num("f_dens"),fv=mL("f_vol","f_volu"),n=num("f_n"),dm=num("f_dmso"),spare=num("f_spare"),base=$("f_base").value;
+  const V=mL("c_vol","c_volu"),live=num("c_live"),dead=num("c_dead")||0;
+  if(!isFinite(C1)||C1<=0){$("o4").innerHTML=flag("bad","Enter a count in step 1 first.");W("w4",[]);return;}
+  if(![dens,fv,n].every(x=>isFinite(x)&&x>0)||!(dm>=0&&dm<100)||!(spare>=0)){$("o4").innerHTML=flag("bad","Fill in every value. Cells per mL, vial volume and number of vials must be positive, and DMSO must be between 0 and 100%.");W("w4",[]);return;}
+  const cellsNeed=dens*fv*n;
+  const spin=upS(cellsNeed/C1);
+  const cellsTaken=spin*C1;
+  const resus=r10(fv*n);
+  const realDens=cellsTaken/resus;
+  const fmRaw=fv*(n+spare);
+  const fm=fmRaw>=1?Math.ceil(r10(fmRaw)):upS(fmRaw);
+  const dmsoV=upS(fm*dm/100), baseV=Math.max(0,r10(fm-dmsoV));
+  const realDmso=dmsoV/fm*100;
+  const totalCells=C1*V;
+  let h=`<div class="big">${spin>V?"Not enough cells for this plan":`Spin down ${vol(spin)} of cells`}</div>
+  <div class="recipe">1. Make <b>${vol(fm)}</b> freezing medium: <b>${vol(baseV)}</b> ${base} + <b>${vol(dmsoV)}</b> DMSO (${sig(realDmso,3)}% DMSO). Mix and keep it cold.<br>
+  2. Take <b>${vol(spin)}</b> of cell suspension${convNote(spin,true,"cells")} (${cells(cellsTaken)} cells).<br>
+  3. Spin at 200 to 300 × g for 5 min, then remove the supernatant.<br>
+  4. Resuspend the pellet in <b>${vol(resus)}</b> freezing medium. Mix gently but fully.<br>
+  5. Put <b>${vol(fv)}</b> into each of ${sig(n)} cryovials.<br>
+  6. Freeze slowly (about −1 °C/min, for example in a freezing container) at −80 °C overnight, then move to liquid nitrogen.</div>
+  <dl class="kv"><dt>Cells needed</dt><dd>${cells(cellsNeed)}</dd><dt>Cells per mL in vials (after rounding)</dt><dd>${cells(realDens)}</dd>
+  <dt>Cells per vial</dt><dd>${cells(realDens*fv)}</dd><dt>Freezing medium left over</dt><dd>${vol(r10(fm-resus))}</dd>
+  <dt>Stock left after freezing</dt><dd>${vol(Math.max(0,V-spin))}</dd></dl>`;
+  if(spin>V){const maxN=Math.floor(totalCells/(dens*fv));
+    h+=flag("bad",`Not enough cells. ${sig(n)} vials at ${cells(dens)} cells/mL need ${cells(cellsNeed)} cells, but your stock has ${cells(totalCells)}. You can make ${maxN} vial${maxN===1?"":"s"} at this density, or ${sig(n)} vials at about ${cells(totalCells/resus)} cells/mL.`);}
+  else if(isFinite(V)&&spin+seedStockUsed>V+1e-9&&seedStockUsed>0) h+=flag("bad",`Seeding (step 2) uses ${vol(seedStockUsed)} and freezing uses ${vol(spin)}, which is more than your ${vol(V)} of stock. Seed first and freeze what is left, or make fewer vials.`);
+  else if(seedStockUsed>0) h+=flag("ok",`Enough cells for both seeding (${vol(seedStockUsed)}) and freezing (${vol(spin)}). About ${vol(Math.max(0,V-spin-seedStockUsed))} of stock left.`);
+  else h+=flag("ok",`Enough cells. You will use ${sig(spin/V*100)}% of your stock.`);
+  if(dead>0&&live>0){const via=live/(live+dead)*100;if(via<80)h+=flag("warn",`Viability is ${sig(via)}%. Cells frozen at low viability recover poorly. Ideally freeze healthy, growing cells at 90% viability or higher.`);}
+  if(dens<5e5) h+=flag("warn",`${cells(dens)} cells/mL is low for freezing. Recovery is usually better at about 1 × 10⁶ cells/mL or more.`);
+  else if(dens>1e7) h+=flag("warn",`${cells(dens)} cells/mL is higher than usual for freezing. Check this is what your lab uses.`);
+  if(dm<5||dm>15) h+=flag("warn",`${sig(dm)}% DMSO is outside the usual 5 to 10% range. Check your lab's protocol.`);
+  h+=roundFlags(spin,true,"the cell volume","cells per vial");
+  $("o4").innerHTML=h;
+  W("w4",[
+    ["Cells needed = cells per mL × vial volume × vials",`${cells(dens)} × ${vol(fv)} × ${sig(n)} = <b>${cells(cellsNeed)}</b>`],
+    ["Cell suspension to spin = cells needed ÷ stock conc",`${cells(cellsNeed)} ÷ ${cells(C1)}`+rounded(cellsNeed/C1,spin,"up")],
+    ["Resuspension volume = vial volume × vials",`${vol(fv)} × ${sig(n)} = <b>${vol(resus)}</b>`],
+    ["Check: cells per mL = cells taken ÷ resuspension volume",`${vol(spin)} × ${cells(C1)} ÷ ${vol(resus)} = <b>${cells(realDens)}</b>`],
+    ["Freezing medium to make = vial volume × (vials + extra)",`${vol(fv)} × (${sig(n)} + ${sig(spare)})`+rounded(fmRaw,fm,"up")],
+    ["DMSO = freezing medium × DMSO %",`${vol(fm)} × ${sig(dm)}%`+rounded(fm*dm/100,dmsoV,"up")],
+    [`${base} = freezing medium − DMSO`,`${vol(fm)} − ${vol(dmsoV)} = <b>${vol(baseV)}</b>`]
+  ]);
+}
+
+// ---------- 5. Lysis buffer ----------
+function stage5(){
+  const n=num("l_n"),v=mL("l_v","l_vu"),over=(num("l_over")||0)/100,base=$("l_base").value;
+  if(![n,v].every(x=>isFinite(x)&&x>0)||!(over>=0)){$("o5").innerHTML=flag("bad","Fill in the number of samples and the buffer per sample (both positive).");W("w5",[]);return;}
+  const totRaw=n*v*(1+over);
+  const tot=upS(totRaw);
+  let h="",adds=[],problems=[];
+  ADDS.forEach((a,i)=>{
+    if(!$(`l_a${i}_on`).checked)return;
+    const name=$(`l_a${i}_nm`).value.trim()||"Additive",st=num(`l_a${i}_st`),fi=num(`l_a${i}_fi`),u=$(`l_a${i}_u`).value;
+    if(!(st>0&&fi>0)){problems.push(`${name}: enter a stock and a final value.`);return;}
+    const fold=st/fi;
+    if(fold<=1){problems.push(`${name}: the stock (${sig(st)} ${u}) must be more concentrated than the final (${sig(fi)} ${u}).`);return;}
+    const exact=tot/fold, v2=nearS(exact), realFinal=st*v2/tot;
+    adds.push({name,st,fi,u,fold,exact,v:v2,realFinal});
+  });
+  const addSum=adds.reduce((s,a)=>s+a.v,0);
+  const baseV=r10(tot-addSum);
+  const fmt=(x,u)=>u==="x"?sig(x)+"×":sig(x)+" "+u;
+  h+=`<div class="big">${vol(tot)} complete ${base}</div>`;
+  h+=`<div class="recipe">1. Put <b>${vol(baseV)}</b> ${base} in a cold tube on ice.<br>`+
+    adds.map((a,k)=>`${k+2}. Add <b>${vol(a.v)}</b> ${a.name} (${fmt(a.st,a.u)} stock to ${fmt(a.fi,a.u)})`+(/PMSF/i.test(a.name)?" <i>last, right before lysing</i>":"")).join("<br>")+
+    (adds.length?"<br>":"")+`${adds.length+2}. Mix gently, keep on ice, and use <b>${vol(v)}</b> per sample.</div>`;
+  h+=`<dl class="kv"><dt>Samples</dt><dd>${sig(n)} × ${vol(v)}</dd><dt>Batch incl. ${Math.round(over*100)}% extra</dt><dd>${vol(tot)}</dd><dt>Inhibitors total</dt><dd>${vol(addSum)} (${sig(addSum/tot*100,2)}% of volume)</dd></dl>`;
+  problems.forEach(p=>h+=flag("bad",p));
+  adds.forEach(a=>{h+=tinyFlag(a.v,a.name);if(Math.abs(a.realFinal/a.fi-1)>0.05)h+=flag("warn",`${a.name} rounds to ${vol(a.v)}, giving ${fmt(a.realFinal,a.u)} instead of ${fmt(a.fi,a.u)}. Make a bigger batch or pre-dilute the stock.`);});
+  if(addSum/tot>0.15) h+=flag("warn",`The additives make up ${sig(addSum/tot*100,2)}% of the buffer, which dilutes the base buffer. Use more concentrated stocks if you can.`);
+  if(adds.some(a=>/PMSF/i.test(a.name))) h+=flag("warn","PMSF breaks down within a couple of hours in water-based buffers and is toxic. Add it last, right before lysing, from a stock in ethanol or isopropanol, and handle it with gloves.");
+  if(adds.some(a=>/vanadate/i.test(a.name))) h+=flag("ok","Use activated sodium orthovanadate (pH 10, boiled until colourless) or it inhibits phosphatases poorly.");
+  if(!adds.some(a=>/phosphatase|vanadate/i.test(a.name))) h+=flag("warn","No phosphatase inhibitor selected. If you will blot for phospho-proteins (for example p-eIF2α or p-ERK), add one, or the phospho-signal can be lost during lysis.");
+  $("o5").innerHTML=h;
+  W("w5",[["Batch = samples × volume per sample × (1 + extra)",`${sig(n)} × ${vol(v)} × ${sig(1+over,3)}`+rounded(totRaw,tot,"up")]]
+    .concat(adds.map(a=>[`${a.name} = batch ÷ (stock ÷ final) = batch ÷ ${sig(a.fold)}`,`${vol(tot)} ÷ ${sig(a.fold)}`+rounded(a.exact,a.v,"off")]))
+    .concat([[`${base} = batch − all additives`,`${vol(tot)} − ${vol(addSum)} = <b>${raw(baseV)}</b>`]]));
+}
+
+// ---------- 6. qPCR master mix ----------
+function stage6(){
+  const s=num("q_s"),g=num("q_g"),r=num("q_r"),over=(num("q_over")||0)/100,v=mL("q_v","q_vu")*1000; // µL
+  const mx=num("q_mx"),pst=num("q_pst"),pf=num("q_pf"),t=num("q_t"),pair=$("q_pair").value,plate=+$("q_plate").value,ntc=$("q_ntc").checked;
+  if(![s,g,r,v,mx,pst,pf].every(x=>isFinite(x)&&x>0)||!(t>=0)||mx<=1){$("o6").innerHTML=flag("bad","Fill in every value (all positive). Master mix strength must be above 1×.");W("w6",[]);return;}
+  const rxnPerGene=s*r+(ntc?r:0);
+  const nMix=Math.ceil(r10(rxnPerGene*(1+over)));
+  const mmPer=v/mx;
+  const primerPer=v*(pf/1000)/pst;      // µL of each primer (or of premix)
+  const nPrimerTubes=pair==="sep"?2:1;
+  const waterPer=v-mmPer-primerPer*nPrimerTubes-t;
+  const mixPer=v-t;
+  const uL=x=>vol(x/1000);
+  const wells=rxnPerGene*g;
+  const rows=[[`${sig(mx)}× master mix`,mmPer]];
+  if(pair==="sep"){rows.push(["Forward primer",primerPer],["Reverse primer",primerPer]);}else rows.push(["Primer premix (F+R)",primerPer]);
+  rows.push(["Nuclease-free water",waterPer]);
+  let h=`<div class="big">${nMix} reactions' worth per gene</div>`;
+  if(waterPer<0){h+=flag("bad",`The parts add up to more than ${uL(v)}: ${uL(v-waterPer)} before water. Lower the template volume, use a more concentrated primer stock, or a larger reaction.`);$("o6").innerHTML=h;W("w6",[]);return;}
+  h+=`<div class="tablewrap"><table class="compact"><thead><tr><th>Per gene mix</th><th>1 rxn</th><th>× ${nMix}</th></tr></thead><tbody>`+
+    rows.map(x=>`<tr><td>${x[0]}</td><td>${uL(x[1])}</td><td>${uL(x[1]*nMix)}</td></tr>`).join("")+
+    `<tr><td><b>Mix total</b></td><td><b>${uL(mixPer)}</b></td><td><b>${uL(mixPer*nMix)}</b></td></tr></tbody></table></div>`;
+  h+=`<div class="recipe">Make ${sig(g)} mixes (one per gene), each as above.<br>Dispense <b>${uL(mixPer)}</b> mix per well, then add <b>${uL(t)}</b> cDNA${ntc?" (water for NTC wells)":""}.<br>`+
+    `Total ${sig(mx)}× master mix needed: <b>${uL(mmPer*nMix*g)}</b><br>`+
+    `cDNA per sample (all genes, ${sig(r)} reps, +${Math.round(over*100)}%): at least <b>${uL(t*r*g*(1+over))}</b></div>`;
+  h+=`<dl class="kv"><dt>Reactions per gene</dt><dd>${sig(s)} × ${sig(r)}${ntc?` + ${sig(r)} NTC`:""} = ${sig(rxnPerGene)}</dd><dt>Wells used</dt><dd>${sig(wells)} of ${plate}</dd><dt>Final primer (each)</dt><dd>${sig(pf)} nM</dd></dl>`;
+  if(wells>plate) h+=flag("bad",`${sig(wells)} wells do not fit on one ${plate}-well plate. Split the genes across ${Math.ceil(wells/plate)} plates (keep each sample's reference gene on the same plate as its targets), or reduce replicates.`);
+  else h+=flag("ok",`Fits on one ${plate}-well plate with ${plate-wells} wells free.`);
+  h+=tinyFlag(primerPer/1000,"primer per reaction")?flag("ok",`Per reaction the primer volume is only ${uL(primerPer)}, but you pipette ${uL(primerPer*nMix)} into the mix, which is fine.`):"";
+  if(primerPer*nMix<2) h+=tinyFlag(primerPer*nMix/1000,"primer in the mix");
+  if(pf<100||pf>900) h+=flag("warn",`${sig(pf)} nM primers is outside the usual 100 to 900 nM range. Check your master mix manual.`);
+  if(!ntc) h+=flag("warn","No NTC. Without it you cannot tell primer dimers or contamination from real signal.");
+  if(r<2) h+=flag("warn","Single replicates make outliers impossible to spot. Use 2 or 3 technical replicates.");
+  $("o6").innerHTML=h;
+  W("w6",[
+    ["Reactions per gene = samples × replicates"+(ntc?" + NTC replicates":""),`${sig(s)} × ${sig(r)}${ntc?` + ${sig(r)}`:""} = <b>${sig(rxnPerGene)}</b>`],
+    ["Mix size = reactions × (1 + extra), rounded up",`${sig(rxnPerGene)} × ${sig(1+over,3)} = ${sig(rxnPerGene*(1+over),4)}, rounded up to <b>${nMix}</b>`],
+    ["Master mix per reaction = reaction volume ÷ strength",`${uL(v)} ÷ ${sig(mx)} = <b>${uL(mmPer)}</b>`],
+    ["Primer per reaction = reaction volume × final ÷ stock",`${uL(v)} × ${sig(pf)} nM ÷ ${sig(pst)} µM = <b>${uL(primerPer)}</b>${pair==="sep"?" (each)":""}`],
+    ["Water = reaction volume − master mix − primers − template",`${uL(v)} − ${uL(mmPer)} − ${uL(primerPer*nPrimerTubes)} − ${uL(t)} = <b>${uL(waterPer)}</b>`],
+    ["Wells = reactions per gene × genes",`${sig(rxnPerGene)} × ${sig(g)} = <b>${sig(wells)}</b>`]
+  ]);
+}
+
+function run(){stage1();stage2();stage3();stage4();stage5();stage6();save();}
+ids.forEach(i=>{$(i).addEventListener("input",run);$(i).addEventListener("change",run);});
+const syncVessel=()=>{const v=mL("s_v","s_vu");const m=[...$("s_vessel").options].find(o=>o.value!=="custom"&&Math.abs(Number(o.value)-v)<1e-9);$("s_vessel").value=m?m.value:"custom";};
+$("s_v").addEventListener("input",syncVessel);
+$("s_vessel").addEventListener("change",()=>{const ves=$("s_vessel").value;if(ves==="custom")return;$("s_v").value=String(+(Number(ves)/mul("s_vu")).toPrecision(6));run();});
+document.querySelectorAll("select.unit").forEach(sel=>{sel.dataset.prev=sel.value;sel.addEventListener("change",()=>{
+  const inp=sel.parentElement.querySelector("input");const x=parseNum(inp.value);
+  if(isFinite(x)) inp.value=String(+(x*Number(sel.dataset.prev)/Number(sel.value)).toPrecision(6));
+  sel.dataset.prev=sel.value;if(sel.id==="s_vu")syncVessel();run();});});
+$("reset").addEventListener("click",()=>{ids.forEach(i=>{const e=$(i);if(e.type==="checkbox")e.checked=defaults[i];else e.value=defaults[i];});run();});
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{
+  document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-selected",x===b));
+  const t=$(b.dataset.go);const y=t.getBoundingClientRect().top+window.scrollY-60;window.scrollTo({top:y,behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+}));
+
+// Keep the highlighted tab in step with whatever section you have scrolled to
+if("IntersectionObserver" in window){
+  const tabs=[...document.querySelectorAll("nav button")];
+  const io=new IntersectionObserver(es=>{es.forEach(e=>{if(!e.isIntersecting)return;
+    const b=tabs.find(t=>t.dataset.go===e.target.id);if(!b)return;
+    tabs.forEach(x=>x.setAttribute("aria-selected",x===b));
+    const nav=b.parentElement;nav.scrollTo({left:b.offsetLeft-nav.clientWidth/2+b.offsetWidth/2,behavior:"smooth"});});},{rootMargin:"-30% 0px -60% 0px"});
+  document.querySelectorAll("section.stage").forEach(sec=>io.observe(sec));
+}
+
+// ---------- BenchMate hook: when opened inside the app, each tool gets a "Save to run" button ----------
+let host=null;
+window.addEventListener("message",ev=>{
+  const m=ev.data||{};
+  if(m.type!=="bm-context")return;
+  host=ev.source; document.body.classList.add("embedded");
+  if(m.accent){const r=document.documentElement.style;r.setProperty("--accent",m.accent);r.setProperty("--accent-soft",m.accentSoft||"");}
+  if(m.dark!=null) document.documentElement.setAttribute("data-theme",m.dark?"dark":"light");
+  document.querySelector("header").hidden=true;
+  document.querySelectorAll(".savebtn").forEach(b=>{b.hidden=false;b.textContent=m.label?`Save to ${m.label}`:"Save to notes";b.classList.remove("done");});
+  if(m.open){const t=document.querySelector(`nav button[data-go="${m.open}"]`);if(t)setTimeout(()=>t.click(),60);}
+});
+document.querySelectorAll(".savebtn").forEach(b=>b.addEventListener("click",()=>{
+  if(!host)return;
+  const sec=$(b.dataset.save), title=sec.querySelector("h2").textContent.replace(/^\d+/,"").trim();
+  // Read the live panel (innerText needs layout to keep line breaks), skipping the reassuring green notes
+  const out=$("o"+b.dataset.save.slice(1)), oks=[...out.querySelectorAll(".flag.ok")];
+  oks.forEach(x=>x.style.display="none");
+  out.querySelectorAll(".kv dt").forEach(x=>{x.dataset.t=x.textContent;x.textContent=x.textContent+":";});
+  let text=out.innerText;
+  out.querySelectorAll(".kv dt").forEach(x=>{x.textContent=x.dataset.t;});
+  oks.forEach(x=>x.style.display="");
+  text=text.replace(/:\n/g,": ").replace(/[ \t]+\n/g,"\n").replace(/\n{3,}/g,"\n\n").trim();
+  host.postMessage({type:"bm-save",kind:title,text},"*");
+  b.classList.add("done");b.textContent="Saved ✓";
+}));
+run();
+})();
+</script>
+</body></html>
